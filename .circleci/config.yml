@@ -1,60 +1,60 @@
-# This config was automatically generated from your source code
-# Stacks detected: deps:node:Develop
 version: 2.1
 orbs:
-  node: circleci/node@5
+  cypress: cypress-io/cypress@3.3.1
+
 jobs:
-  test-node:
-    # Install node dependencies and run tests
-    executor: node/default
-    working_directory: ~/project/Develop
-    steps:
-      - checkout:
-          path: ~/project
-      - node/install-packages:
-          cache-path: ~/project/node_modules
-          override-ci-command: npm install
-      - run:
-          name: Run tests
-          command: npm test --passWithNoTests
-  build-node:
-    # Build node project
-    executor: node/default
-    working_directory: ~/project/Develop
-    steps:
-      - checkout:
-          path: ~/project
-      - node/install-packages:
-          cache-path: ~/project/node_modules
-          override-ci-command: npm install
-      - run:
-          command: npm run build
-      - run:
-          name: Create the ~/artifacts directory if it doesn't exist
-          command: mkdir -p ~/artifacts
-      # Copy output to artifacts dir
-      - run:
-          name: Copy artifacts
-          command: cp -R build dist public .output .next .docusaurus ~/artifacts 2>/dev/null || true
-      - store_artifacts:
-          path: ~/artifacts
-          destination: node-build
-  deploy:
-    # This is an example deploy job, not actually used by the workflow
+  start-server:
     docker:
-      - image: cimg/base:stable
+      - image: cypress/base:latest
     steps:
-      # Replace this with steps to deploy to users
+      - checkout
       - run:
-          name: deploy
-          command: '#e.g. ./deploy.sh'
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Build the app
+          command: npm run build
+  deploy-to-render-staging:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - run:
+          name: Deploy to Render Staging
+          command: |
+            echo "Deploying to Render Staging"
+            curl $RENDER_STAGING_DEPLOYHOOK
+  deploy-to-render-production:
+    docker:
+      - image: cimg/base:current
+    steps:
+      - run:
+          name: Deploy to Render Production
+          command: |
+            echo "Deploying to Render production"
+            curl $RENDER_PRODUCTION_DEPLOYHOOK
+
 workflows:
-  build-and-test:
+  run-tests-and-deploy-to-staging-hold-then-production:
     jobs:
-      - test-node
-      - build-node:
+      - start-server
+      - cypress/run:
+          name: run-component-tests
+          cypress-command: npx cypress run --component
           requires:
-            - test-node
-    # - deploy:
-    #     requires:
-    #       - build-node
+            - start-server
+      - deploy-to-render-staging:
+          requires:
+            - run-component-tests
+          filters:
+            branches:
+              only: main
+      - hold:
+          type: approval
+          requires:
+            - deploy-to-render-staging
+      - deploy-to-render-production:
+          requires:
+            - hold
+          filters:
+            branches:
+              only: main
