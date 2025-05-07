@@ -1,6 +1,4 @@
 version: 2.1
-orbs:
-  cypress: cypress-io/cypress@3.3.1
 
 jobs:
   start-server:
@@ -14,6 +12,17 @@ jobs:
       - run:
           name: Build the app
           command: npm run build
+  run-component-tests:
+    docker:
+      - image: cypress/base:latest
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm install
+      - run:
+          name: Run Cypress Component Tests
+          command: npx cypress run --component
   deploy-to-render-staging:
     docker:
       - image: cimg/base:current
@@ -37,9 +46,7 @@ workflows:
   run-tests-and-deploy-to-staging-hold-then-production:
     jobs:
       - start-server
-      - cypress/run:
-          name: run-component-tests
-          cypress-command: npx cypress run --component
+      - run-component-tests:
           requires:
             - start-server
       - deploy-to-render-staging:
